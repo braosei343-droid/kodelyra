@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kodelyra · Scan &amp; Play</title>
+  <script>
+    /* Someone typed a path (…/play/011) instead of …/play/?011 — send them to the right page. */
+    (function () {
+      var parts = location.pathname.split('/').filter(Boolean);
+      var last = parts.pop() || '';
+      var base = '/' + parts.join('/') + (parts.length ? '/' : '');
+      location.replace(base + (last ? '?' + encodeURIComponent(last) : ''));
+    })();
+  </script>
+</head>
+<body><p><a href="./">Open Kodelyra Scan &amp; Play</a></p></body>
+</html>
