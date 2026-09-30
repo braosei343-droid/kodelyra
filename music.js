@@ -183,6 +183,8 @@
   const DRUMS = {
     worship: { name: 'Soft ballad beat', steps: 16, rows: [{ i: 'kick', hits: [0, 10], v: 0.75 }, { i: 'clap', hits: [4, 12], v: 0.4 }, { i: 'shaker', hits: EIGHTHS, v: 0.45 }] },
     praise: { name: 'Upbeat dance beat', steps: 16, rows: [{ i: 'kick', hits: [0, 6, 8], v: 0.9 }, { i: 'clap', hits: [4, 12], v: 0.7 }, { i: 'shaker', hits: [0, 2, 3, 4, 6, 8, 10, 11, 12, 14], v: 0.45 }] },
+    afropraise: { name: 'Afro praise beat', steps: 16, rows: [{ i: 'kick', hits: [0, 4, 8, 12], v: 0.85 }, { i: 'clap', hits: [4, 12], v: 0.6 }, { i: 'clave', hits: [0, 6, 12], v: 0.4 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], v: 0.3 }] },
+    ghanapraise: { name: 'Ghana praise beat', steps: 16, rows: [{ i: 'kick', hits: [0, 4, 8, 12], v: 0.8 }, { i: 'rim', hits: [4, 12], v: 0.55 }, { i: 'congahi', hits: [3, 10], v: 0.5 }, { i: 'congalo', hits: [6, 7, 14], v: 0.55 }, { i: 'shaker', hits: [0, 2, 3, 4, 6, 8, 10, 11, 12, 14], v: 0.3 }] },
     highlife: { name: 'Highlife bell and drum', steps: 12, rows: [{ i: 'bell', hits: [0, 2, 4, 5, 7, 9, 11], v: 0.45 }, { i: 'kick', hits: [0, 6], v: 0.8 }, { i: 'clap', hits: [3, 9], v: 0.4 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], v: 0.3 }] },
     hymn: { name: 'Gentle pulse', steps: 4, rows: [{ i: 'kick', hits: [0], v: 0.6 }, { i: 'shaker', hits: [1, 2, 3], v: 0.35 }] },
     steady: { name: 'Steady beat', steps: 8, rows: [{ i: 'kick', hits: [0, 4], v: 0.75 }, { i: 'clap', hits: [2, 6], v: 0.5 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7], v: 0.35 }] },
@@ -278,7 +280,7 @@
 
   /* ───────────── event builders ───────────── */
 
-  const PERC = { kick: 'k', clap: 'c', bell: 'e', clave: 'v', guiro: 'g', shaker: 's', click: 'n' };
+  const PERC = { kick: 'k', clap: 'c', bell: 'e', clave: 'v', guiro: 'g', shaker: 's', click: 'n', rim: 'r', congahi: 'h', congalo: 'q' };
   const round = (x) => Math.round(x * 1000) / 1000;
 
   function ev(events, b, d, i, n, v) {

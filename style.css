@@ -48,6 +48,16 @@ summary small { color: var(--muted); font-weight: 700; margin-left: 6px; }
 .entry-head .ref { margin: 16px 0 2px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .entry-head h1 { margin: 0; font-size: 28px; line-height: 1.15; }
 .entry-head .meta { margin: 4px 0 0; color: var(--muted); }
+.set { margin: 12px 0 0; }
+.set-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.set-head b { color: var(--magenta); }
+.set-head a { font-weight: 800; text-transform: none; letter-spacing: 0; font-size: 14px; text-decoration: none; }
+.set-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.set-song { flex: none; display: flex; flex-direction: column; padding: 8px 12px; border-radius: 12px; border: 2px solid var(--line); background: #fff; color: var(--ink); text-decoration: none; max-width: 200px; }
+.set-song b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-song small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-song.on { border-color: var(--magenta); background: #FDEBEF; }
+.set-song.on b { color: var(--magenta); }
 
 .stage { margin: 14px 0 10px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
 .now { text-align: center; min-height: 74px; }

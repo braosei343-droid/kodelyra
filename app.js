@@ -240,6 +240,9 @@
           noise('bandpass', 3800, 1.2, 0.16);
           break;
         }
+        case 'r': env(0.5 * vel, 0.05); tone('triangle', 1650, 0.04, 1100); noise('bandpass', 2600, 2, 0.03); break;
+        case 'h': env(0.55 * vel, 0.16); tone('sine', 360, 0.15, 300); tone('triangle', 720, 0.05); break;
+        case 'q': env(0.6 * vel, 0.24); tone('sine', 235, 0.22, 190); break;
         case 'm': env(0.35 * vel, 0.04); tone('sine', 1760, 0.04); break;
         case 'n': env(0.3 * vel, 0.035); tone('sine', 1320, 0.035); break;
         default: break;
@@ -431,7 +434,7 @@
 
   function home() {
     document.title = 'Kodelyra · Scan & Play';
-    const lessons = DATA.entries.filter((e) => e.kind === 'lesson');
+    const lessons = DATA.entries.filter((e) => e.kind === 'lesson' && !e.parent);
     const chapters = DATA.entries.filter((e) => e.kind === 'chapter');
     const songs = DATA.entries.filter((e) => e.kind === 'song');
     const groups = [];
@@ -476,9 +479,15 @@
     let semis = 0;
     let compiled = M.compile(entry, { semis });
     let trackIdx = Math.max(0, compiled.tracks.findIndex((t) => t.name === route.track));
-    const i = DATA.entries.indexOf(entry);
-    const prev = DATA.entries[i - 1];
-    const next = DATA.entries[i + 1];
+    const main = DATA.entries.filter((e) => !e.parent);
+    const i = main.indexOf(entry.parent ? byCode.get(entry.parent) : entry);
+    const prev = main[i - 1];
+    const next = main[i + 1];
+    const set = entry.set;
+    const setNav = set ? `<nav class="set" aria-label="${esc(set.label)}">
+        <div class="set-head"><b>${esc(set.label)}</b>${entry.parent ? `<a href="?${set.hub}" data-go="${set.hub}">All songs →</a>` : ''}</div>
+        <div class="set-list">${set.items.map((s) => `<a class="set-song${s.code === entry.code ? ' on' : ''}" href="?${s.code}" data-go="${s.code}"${s.code === entry.code ? ' aria-current="page"' : ''}><b>${esc(s.title)}</b><small>${esc(s.by)}</small></a>`).join('')}</div>
+      </nav>` : '';
     document.title = `${entry.ref} · ${entry.title} — Kodelyra Scan & Play`;
     const isSong = entry.kind === 'song';
     const yt = isSong ? `https://www.youtube.com/results?search_query=${encodeURIComponent(`${entry.title} ${entry.country === 'Ghana' ? 'Twi song Ghana' : /traditional/i.test(entry.artist || '') ? 'traditional song' : entry.artist || ''}`)}` : null;
@@ -490,6 +499,7 @@
         <h1>${entry.flag ? `<span class="flag">${entry.flag}</span> ` : ''}${esc(entry.title)}</h1>
         <p class="meta">${esc([entry.artist, entry.country, entry.style].filter(Boolean).join(' · ') || entry.sub || '')}</p>
       </section>
+      ${setNav}
       <section class="stage">
         <div class="now"><div class="now-label" id="nowLabel">Press play</div><div class="now-sub" id="nowSub">${esc(compiled.tracks[trackIdx].desc)}</div></div>
         <div class="kb-wrap" id="kb"></div>
