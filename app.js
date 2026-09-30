@@ -308,7 +308,9 @@
 
   const isBlack = (m) => [1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12);
 
-  function keyboardSVG(lo, hi) {
+  const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+  function keyboardSVG(lo, hi, flats) {
     while (lo % 12 !== 0 && lo % 12 !== 5) lo--;
     while (hi % 12 !== 11 && hi % 12 !== 4) hi++;
     const whites = [];
@@ -319,10 +321,10 @@
     let bk = '';
     whites.forEach((m, i) => {
       const name = M.midiName(m).replace(/\d+$/, '');
-      wk += `<g class="key white" data-m="${m}"><rect x="${i * W}" y="0" width="${W}" height="${H}" rx="4"/><text x="${i * W + W / 2}" y="${H - 12}">${name === 'C' ? M.midiName(m) : name}</text></g>`;
+      wk += `<g class="key white" data-m="${m}"><rect x="${i * W}" y="0" width="${W}" height="${H}" rx="4"/><text x="${i * W + W / 2}" y="${H - 12}">${name === 'C' ? M.midiName(m) : name}</text><text class="fing" x="${i * W + W / 2}" y="${H - 40}"></text></g>`;
       if (m + 1 <= hi && isBlack(m + 1)) {
-        const nm = M.pretty(M.midiName(m + 1).replace(/\d+$/, ''));
-        bk += `<g class="key black" data-m="${m + 1}"><rect x="${i * W + W * 0.66}" y="0" width="${W * 0.68}" height="${H * 0.62}" rx="3"/><text x="${i * W + W}" y="${H * 0.62 - 10}">${nm}</text></g>`;
+        const nm = M.pretty(flats ? FLAT_NAMES[(m + 1) % 12] : M.midiName(m + 1).replace(/\d+$/, ''));
+        bk += `<g class="key black" data-m="${m + 1}"><rect x="${i * W + W * 0.66}" y="0" width="${W * 0.68}" height="${H * 0.62}" rx="3"/><text x="${i * W + W}" y="${H * 0.62 - 10}">${nm}</text><text class="fing" x="${i * W + W}" y="${H * 0.62 - 30}"></text></g>`;
       }
     });
     return `<svg class="kb" viewBox="-1 -1 ${whites.length * W + 2} ${H + 2}" role="img" aria-label="Piano keyboard showing the notes being played">${wk}${bk}</svg>`;
@@ -365,7 +367,7 @@
     const songs = DATA.entries.filter((e) => e.kind === 'song');
     const groups = [];
     songs.forEach((s) => {
-      const g = s.n <= 10 ? 'Songs 1–10 · First adventures' : (s.group || 'Songs');
+      const g = s.n <= 10 ? 'Ghana Gospel Songs' : (s.group || 'Songs');
       let grp = groups.find((x) => x.name === g);
       if (!grp) { grp = { name: g, items: [] }; groups.push(grp); }
       grp.items.push(s);
@@ -374,7 +376,7 @@
       <header class="top"><div class="brand"><span class="logo">K</span> Kodelyra <b>Scan &amp; Play</b></div></header>
       <section class="hero">
         <h1>Hear it. Slow it down. Play along.</h1>
-        <p>Every QR code in <em>Play 200 Songs on Piano — Book 1</em> opens a page here. Tap a lesson or song, press <strong>Play</strong>, and watch the keys light up.</p>
+        <p>Every QR code in <em>Play Ghana Gospel on Piano — Book 1</em> opens a page here. Tap a lesson or song, press <strong>Play</strong>, and watch the keys light up.</p>
         <ol class="how"><li><strong>Listen</strong> — hear the example</li><li><strong>Slow</strong> — chord by chord, note by note</li><li><strong>Rhythm</strong> — clap it first</li><li><strong>Play along</strong> — join in, at your speed</li></ol>
         <p class="tip">🔊 Turn the volume up. On iPhone, also flip the silent switch off if you hear nothing.</p>
       </section>
@@ -383,7 +385,7 @@
       <details open><summary>Levels 1–2 · Lessons</summary><div class="list">${lessons.map(linkTo).join('')}</div></details>
       ${groups.map((g) => `<details><summary>${esc(g.name)} <small>${g.items.length}</small></summary><div class="list">${g.items.map(linkTo).join('')}</div></details>`).join('')}
       <details><summary>Levels 3–5 · Chapter sounds</summary><div class="list">${chapters.map(linkTo).join('')}</div></details>
-      <footer class="foot">Kodelyra · Play 200 Songs on Piano — Book 1 · Sounds are the book’s own piano arrangements, generated in your browser. Works offline after your first visit.</footer>`;
+      <footer class="foot">Kodelyra · Play Ghana Gospel on Piano — Book 1 · Sounds are the book’s own piano arrangements, generated in your browser. Works offline after your first visit.</footer>`;
     const input = $('#q');
     const results = $('#results');
     input.addEventListener('input', () => {
@@ -443,6 +445,7 @@
         <a class="btn outline" href="${yt}" target="_blank" rel="noopener">▶ ${entry.lyrics ? 'Hear it sung (YouTube search)' : 'Hear the original recording (YouTube)'}</a>
         <p class="small-note">${entry.lyrics ? 'The player plays the book’s version in C. Use Key − / + to move it to your church’s key.' : 'The player uses the book’s simplified piano version so you can hear exactly what to play. The original recording opens on YouTube.'}</p>
       </section>` : ''}
+      ${entry.listen ? `<section class="info"><div class="card"><h3>Hear the songs</h3>${entry.listen.map((s) => `<p><a class="btn outline" href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${s.title} ${s.artist}`)}" target="_blank" rel="noopener">▶ ${esc(s.title)} — ${esc(s.artist)}</a></p>`).join('')}<p class="small-note">Recordings open on YouTube. The player plays the book’s practice loop in C — use Key − / + until it matches the recording.</p></div></section>` : ''}
       <nav class="pager">${prev ? `<a href="?${prev.code}" data-go="${prev.code}">← ${esc(prev.ref)}</a>` : '<span></span>'}${next ? `<a href="?${next.code}" data-go="${next.code}">${esc(next.ref)} →</a>` : '<span></span>'}</nav>
       <p class="tip center">🔊 No sound? Turn the volume up — on iPhone, flip the silent switch off.</p>`;
 
@@ -455,8 +458,10 @@
     let lastMark = null;
 
     function drawKeyboard() {
-      const [lo, hi] = rangeOf(compiled.tracks);
-      $('#kb').innerHTML = keyboardSVG(lo, hi);
+      const [lo, hi] = rangeOf(entry.kb === 'track' ? [compiled.tracks[trackIdx]] : compiled.tracks);
+      const spec = compiled.spec;
+      const key = (spec.tracks && spec.tracks[trackIdx] && spec.tracks[trackIdx].key) || spec.key;
+      $('#kb').innerHTML = keyboardSVG(lo, hi, M.FLAT_KEYS.includes(key));
       keys = new Map([...$('#kb').querySelectorAll('.key')].map((k) => [Number(k.dataset.m), k]));
       lit = new Set();
     }
@@ -474,9 +479,10 @@
       $('#keyOut').textContent = compiled.spec.key ? M.pretty(compiled.spec.key) : (semis ? `${semis > 0 ? '+' : ''}${semis}` : 'C');
     }
 
-    function setLit(on) {
-      lit.forEach((m) => { if (!on.has(m)) keys.get(m) && keys.get(m).classList.remove('rh', 'lh'); });
-      on.forEach((val, m) => { const k = keys.get(m); if (k) { k.classList.remove('rh', 'lh'); k.classList.add(val); } });
+    function setLit(on, fingers = new Map()) {
+      const fing = (k, f) => { const el = k.querySelector('.fing'); if (el) el.textContent = f || ''; };
+      lit.forEach((m) => { if (!on.has(m) && keys.get(m)) { keys.get(m).classList.remove('rh', 'lh'); fing(keys.get(m), ''); } });
+      on.forEach((val, m) => { const k = keys.get(m); if (k) { k.classList.remove('rh', 'lh'); k.classList.add(val); fing(k, fingers.get(m)); } });
       lit = new Set(on.keys());
     }
 
@@ -485,19 +491,25 @@
       if (beat < 0) {
         setLit(new Map());
         bar.style.width = '0%';
-        playBtn.textContent = '▶ Play';
-        playBtn.classList.remove('stop');
-        nowLabel.textContent = 'Press play';
+        playBtn.textContent = Player.playing ? '■ Stop' : '▶ Play';
+        playBtn.classList.toggle('stop', Player.playing);
+        nowLabel.textContent = Player.playing ? '…' : 'Press play';
         nowSub.textContent = t.desc;
         document.querySelectorAll('.chip.on').forEach((c) => c.classList.remove('on'));
         lastMark = null;
         return;
       }
       const on = new Map();
+      const fingers = new Map();
       t.events.forEach((e) => {
-        if ((e.i === 'p' || e.i === 'l') && beat >= e.b && beat < e.b + Math.max(e.d, 0.18)) e.n.forEach((m) => on.set(m, e.i === 'l' || m < 60 ? 'lh' : 'rh'));
+        if ((e.i === 'p' || e.i === 'l') && beat >= e.b && beat < e.b + Math.max(e.d, 0.18)) {
+          e.n.forEach((m, k) => {
+            on.set(m, e.i === 'l' || m < 60 ? 'lh' : 'rh');
+            if (e.f && !semis) fingers.set(m, e.f[k]);
+          });
+        }
       });
-      setLit(on);
+      setLit(on, fingers);
       let mk = null;
       for (let k = 0; k < t.marks.length; k++) { if (t.marks[k].b <= beat + 0.01) mk = t.marks[k]; else break; }
       if (mk !== lastMark) {
@@ -538,6 +550,7 @@
       const b = ev.target.closest('button');
       if (!b) return;
       trackIdx = Number(b.dataset.k);
+      drawKeyboard();
       drawTracks(); drawChips();
       frame(-1);
       play();

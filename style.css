@@ -62,6 +62,8 @@ summary small { color: var(--muted); font-weight: 700; margin-left: 6px; }
 .kb .key.rh rect { fill: var(--magenta); stroke: #B8143A; }
 .kb .key.lh rect { fill: var(--orange); stroke: #D98500; }
 .kb .key.rh text, .kb .key.lh text { fill: #fff; }
+.kb text.fing { font-size: 30px; font-weight: 900; fill: #fff; }
+.kb .black text.fing { font-size: 22px; fill: #fff; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; min-height: 34px; }
 .chip { display: inline-flex; align-items: baseline; gap: 4px; padding: 5px 12px; border-radius: 999px; border: 2px solid var(--line); font-weight: 900; font-size: 16px; background: #fff; }
 .chip small { color: var(--orange); font-weight: 900; }

@@ -76,9 +76,10 @@
     return { sym, root, quality, bass, rootPc, bassPc, rh, lh, names: tones.map((t) => t.name), fifth: lh + 7, sixth: lh + 9 };
   }
 
+  /** A bar written "F,G" splits evenly between its chords. */
   function numbersFor(key, chords) {
     const tonic = pcOf(key.replace(/m$/, ''));
-    return chords.map((c) => DEG[(pcOf(parseChord(c).root) - tonic + 12) % 12]);
+    return chords.map((bar) => bar.split(',').map((c) => DEG[(pcOf(parseChord(c).root) - tonic + 12) % 12]).join(','));
   }
 
   /* ───────────── transpose ───────────── */
@@ -95,6 +96,7 @@
 
   function transposeChord(sym, semis, useFlats) {
     if (!semis) return sym;
+    if (sym.includes(',')) return sym.split(',').map((c) => transposeChord(c, semis, useFlats)).join(',');
     const { root, quality, bass } = parseChord(sym);
     const names = useFlats ? FLATS : SHARPS;
     const r = names[(pcOf(root) + semis + 120) % 12] + quality;
@@ -132,7 +134,8 @@
 
   /* ───────────── grooves ─────────────
    * steps = boxes per bar, bpb = beats per bar. Row instruments:
-   * rh (chord until next hit) · rhs (short stab) · rhl (held) · arp (broken 1-3-5-3) · up (1-3-5-8)
+   * rh (chord until next hit) · rhs (short stab) · rhl (held) · rh1 (short root note) · lhs (short LH chord)
+   * arp (broken 1-3-5-3) · up (1-3-5-8)
    * alb (Alberti LH 1-5-3-5) · bass · b5 (fifth) · boog (boogie 5th/6th) · walk (walking bass)
    * kick · clap · bell · clave · guiro · shaker · click
    */
@@ -213,7 +216,9 @@
     if (/kick|drop/.test(l)) return 'kick';
     if (/clap/.test(l)) return 'clap';
     if (/bell/.test(l)) return 'bell';
-    if (/clave/.test(l)) return 'clave';
+    if (/clave|castanet/.test(l)) return 'clave';
+    if (/^lh chop/.test(l)) return 'lhs';
+    if (/^rh one note/.test(l)) return 'rh1';
     if (/güiro|guiro/.test(l)) return 'guiro';
     if (/feet/.test(l)) return 'kick';
     if (/shuffle/.test(l)) return color === 'lh' ? 'boog' : 'click';
@@ -262,19 +267,27 @@
     const vol = opts.vol == null ? 0.7 : opts.vol;
     const percVol = opts.percVol == null ? 0.55 : opts.percVol;
     let prev = null;
-    chords.forEach((sym, bar) => {
-      const info = chordInfo(sym);
-      const rh = voiceLead(prev, info);
-      prev = rh;
+    chords.forEach((barSym, bar) => {
+      const parts = barSym.split(',').map((sym) => {
+        const info = chordInfo(sym);
+        const rh = voiceLead(prev, info);
+        prev = rh;
+        return { sym, info, rh };
+      });
+      const partNums = opts.nums ? String(opts.nums[bar]).split(',') : [];
       const t0 = start + bar * bpb;
       if (marks) {
-        marks.push(opts.markLabel
-          ? { b: t0, label: opts.markLabel, sub: 'Clap along', rh: [], lh: [] }
-          : { b: t0, label: pretty(sym), sub: opts.nums ? opts.nums[bar] : '', chord: sym, rh, lh: [info.lh] });
+        parts.forEach(({ sym, info, rh }, pi) => {
+          const b = t0 + (pi * bpb) / parts.length;
+          marks.push(opts.markLabel
+            ? { b, label: opts.markLabel, sub: 'Clap along', rh: [], lh: [] }
+            : { b, label: pretty(sym), sub: partNums[pi] || '', chord: sym, rh, lh: [info.lh] });
+        });
       }
       groove.rows.forEach((row) => {
         const hits = row.hits.slice().sort((a, b) => a - b);
         hits.forEach((h, hi) => {
+          const { info, rh } = parts[Math.min(parts.length - 1, Math.floor((h * parts.length) / steps))];
           const next = hi + 1 < hits.length ? hits[hi + 1] : steps;
           const t = t0 + h * stepBeat;
           const span = (next - h) * stepBeat;
@@ -284,7 +297,7 @@
             return;
           }
           if (opts.noPiano) return;
-          const isLH = ['bass', 'b5', 'boog', 'walk', 'alb', 'pad'].includes(row.i);
+          const isLH = ['bass', 'b5', 'boog', 'walk', 'alb', 'pad', 'lhs'].includes(row.i);
           if (opts.rhAsClap) {
             ev(events, t, 0.1, isLH ? 'k' : 'c', [], percVol);
             return;
@@ -293,6 +306,8 @@
             case 'rh': ev(events, t, Math.min(span, 2) * 0.9, 'p', rh, vol * 0.8); break;
             case 'rhs': ev(events, t, Math.min(span, 0.5) * 0.6, 'p', rh, vol * 0.8); break;
             case 'rhl': ev(events, t, span * 0.98, 'p', rh, vol * 0.75); break;
+            case 'rh1': ev(events, t, Math.min(span, 0.5) * 0.6, 'p', [60 + info.rootPc - (info.rootPc > 7 ? 12 : 0)], vol * 0.8); break;
+            case 'lhs': ev(events, t, Math.min(span, 0.5) * 0.6, 'l', rh.map((x) => x - 12), vol * 0.7); break;
             case 'pad': ev(events, t, span * 0.99, 'w', [info.lh, ...rh], vol * 0.8); break;
             case 'arp': { const seq = [0, 1, 2, 1]; ev(events, t, span * 0.95, 'p', [rh[seq[hi % 4] % rh.length]], vol * 0.7); break; }
             case 'up': { const seq = [rh[0], rh[1], rh[2], rh[0] + 12]; ev(events, t, span * 0.95, 'p', [seq[hi % 4]], vol * 0.7); break; }
@@ -302,7 +317,7 @@
             case 'boog': { const beat = Math.floor(h / (steps / bpb)); ev(events, t, span * 0.9, 'l', [info.lh, info.lh + (beat % 2 ? 9 : 7)], vol * 0.75); break; }
             case 'walk': {
               const beat = Math.floor(h / (steps / bpb));
-              const nextInfo = chordInfo(chords[(bar + 1) % chords.length]);
+              const nextInfo = chordInfo(chords[(bar + 1) % chords.length].split(',')[0]);
               const line = [info.lh, info.lh + (info.rh[1] - info.rh[0]), info.lh + 7, nextInfo.lh + (nextInfo.lh > info.lh + 7 ? -1 : 1)];
               ev(events, t, span * 0.9, 'l', [line[beat % 4]], vol * 0.8);
               break;
@@ -363,6 +378,7 @@
     let label = null;
     let sub = opts.sub || '';
     const pads = [];
+    const fingers = new Map();
     const noteLabel = (list) => list.map((n) => pretty(n.replace(/-?\d$/, ''))).join(' + ');
     while ((m = re.exec(text))) {
       if (m[1] != null) { label = m[1]; continue; }
@@ -387,16 +403,23 @@
         own = pretty(body.slice(1));
         marks.push({ b: t, label: label || own, sub: label ? sub : `${info.names.map(pretty).join(' · ')}${sub ? ` — ${sub}` : ''}`, chord: label && label !== own ? null : body.slice(1), rh, lh });
       } else {
-        const names = body.split('+');
+        const parts = body.split('+').map((s) => s.split('/'));
+        const names = parts.map(([n]) => n);
         const midis = names.map(noteToMidi);
-        rh = opts.melody ? midis : midis.filter((x) => x >= 60);
-        lh = opts.melody ? [] : midis.filter((x) => x < 60);
+        parts.forEach(([, f], k) => { if (f) fingers.set(midis[k], f); });
+        rh = opts.hand === 'lh' ? [] : opts.melody ? midis : midis.filter((x) => x >= 60);
+        lh = opts.hand === 'lh' ? midis : opts.melody ? [] : midis.filter((x) => x < 60);
         own = noteLabel(names);
         marks.push({ b: t, label: label || own, sub: label && label !== '?' ? `${own}${sub ? ` — ${sub}` : ''}` : sub, rh: label === '?' ? [] : rh, lh: label === '?' ? [] : lh });
       }
       label = null;
-      if (rh.length) ev(events, t, d * 0.95, 'p', rh, opts.vol || 0.65);
-      if (lh.length) ev(events, t, d * 0.95, 'l', lh, (opts.vol || 0.65) * 0.9);
+      const withFingers = (i, list, v) => {
+        ev(events, t, d * 0.95, i, list, v);
+        if (list.some((m) => fingers.has(m))) events[events.length - 1].f = list.map((m) => fingers.get(m) || '');
+      };
+      if (rh.length) withFingers('p', rh, opts.vol || 0.65);
+      if (lh.length) withFingers('l', lh, (opts.vol || 0.65) * 0.9);
+      fingers.clear();
       t += d;
     }
     if (opts.pad !== false) {
@@ -534,7 +557,7 @@
       }
       case 'seq': {
         const n = tr.notes;
-        for (let r = 0; r < reps; r++) end = sequence(t.events, t.marks, n, { start: end, sub: tr.sub, melody: tr.melody, pad: tr.pad, vol: tr.vol });
+        for (let r = 0; r < reps; r++) end = sequence(t.events, t.marks, n, { start: end, sub: tr.sub, melody: tr.melody, hand: tr.hand, pad: tr.pad, vol: tr.vol });
         if (tr.under) softChords(t.events, tr.under.split(/\s+/), bpb, s, 0.22);
         if (tr.clicks) clicks(t.events, s, end - s, bpb, 0.25);
         break;
