@@ -497,6 +497,7 @@
         <div class="progress"><div id="bar"></div></div>
       </section>
       <section class="lyrics" id="lyrics" hidden></section>
+      <section class="guide" id="guide" hidden></section>
       <nav class="tracks" id="tracks" aria-label="Choose what to hear"></nav>
       <section class="transport">
         <button class="play" id="play" aria-label="Play">▶ Play</button>
@@ -625,6 +626,71 @@
       }
     }
 
+    /* Chord guide for songs without printed words: the bars from the book, lit beat by beat. */
+    let gd = null;
+
+    function drawGuide() {
+      const t = compiled.tracks[trackIdx];
+      const el = $('#guide');
+      const spans = [];
+      t.marks.forEach((mk) => { if (mk.chord) spans.push({ b: mk.b, chord: mk.chord, num: mk.sub || '' }); });
+      if (!entry.guide || t.lyrics || spans.length < 2) { el.hidden = true; el.innerHTML = ''; gd = null; return; }
+      spans.forEach((s, k) => { s.e = k + 1 < spans.length ? spans[k + 1].b : t.len; });
+      const bpb = t.bpb || 4;
+      const start = spans[0].b;
+      const nBars = Math.ceil((t.len - start) / bpb - 0.001);
+      let html = '';
+      for (let bar = 0; bar < nBars; bar++) {
+        const b0 = start + bar * bpb;
+        const b1 = b0 + bpb;
+        const segs = spans.map((s, k) => ({ s, k, from: Math.max(s.b, b0), to: Math.min(s.e, b1) })).filter((x) => x.to - x.from > 0.001);
+        const cells = segs.map(({ s, k, from, to }) => `<span class="gd-seg${from > s.b + 0.001 ? ' cont' : ''}" data-k="${k}" style="flex-grow:${to - from}"><b>${esc(M.pretty(s.chord))}</b><small>${esc(s.num)}</small></span>`).join('');
+        const dots = Array.from({ length: bpb }, (_, j) => `<i data-b="${b0 + j}"></i>`).join('');
+        html += `<div class="gd-bar" data-bar="${bar}"><div class="gd-segs">${cells}</div><div class="gd-dots">${dots}</div></div>`;
+      }
+      el.hidden = false;
+      el.innerHTML = `<h3>Chord guide <small>Follow the bars — change chord when the colour moves</small></h3>
+        <div class="gd-count"><div class="gd-beat"><span>Beat</span><b id="gdBeat">–</b><span>of ${bpb}</span></div><div class="gd-next" id="gdNext">Press play</div></div>
+        <div class="gd-grid">${html}</div>`;
+      gd = {
+        spans, bpb, start, len: t.len,
+        segEls: [...el.querySelectorAll('.gd-seg')],
+        barEls: [...el.querySelectorAll('.gd-bar')],
+        dotEls: [...el.querySelectorAll('.gd-dots i')],
+        beatEl: $('#gdBeat'), nextEl: $('#gdNext'),
+        k: -2, beat: -2, next: '',
+      };
+    }
+
+    function guideFrame(beat) {
+      if (!gd) return;
+      let k = -1;
+      if (beat >= 0) gd.spans.forEach((s, i) => { if (s.b <= beat + 0.01) k = i; });
+      const whole = beat >= gd.start ? Math.floor(beat - gd.start + 0.01) : -1;
+      if (k !== gd.k) {
+        gd.segEls.forEach((el) => el.classList.toggle('now', Number(el.dataset.k) === k));
+        gd.k = k;
+      }
+      if (whole !== gd.beat) {
+        const bar = whole >= 0 ? Math.floor(whole / gd.bpb) : -1;
+        gd.barEls.forEach((el, i) => { el.classList.toggle('on', i === bar); el.classList.toggle('done', i < bar); });
+        const abs = gd.start + whole;
+        gd.dotEls.forEach((el) => el.classList.toggle('hit', whole >= 0 && Number(el.dataset.b) === abs));
+        gd.beatEl.textContent = whole >= 0 ? String((whole % gd.bpb) + 1) : '–';
+        gd.beat = whole;
+      }
+      let next = beat < 0 ? (Player.playing ? 'Get ready…' : 'Press play') : '';
+      if (beat >= 0 && k >= 0) {
+        const wrap = !gd.spans[k + 1] && Player.loop;
+        const nx = wrap ? gd.spans[0] : gd.spans[k + 1];
+        const left = nx ? Math.ceil((wrap ? gd.len + nx.b : nx.b) - beat - 0.01) : 0;
+        next = nx ? `Next: <b>${esc(M.pretty(nx.chord))}</b>${nx.num ? ` <small>${esc(nx.num)}</small>` : ''} in ${left} beat${left === 1 ? '' : 's'}` : 'Last chord — hold it';
+        const nk = wrap ? 0 : k + 1;
+        gd.segEls.forEach((el) => el.classList.toggle('soon', !!nx && left <= 1 && Number(el.dataset.k) === nk));
+      }
+      if (next !== gd.next) { gd.nextEl.innerHTML = next; gd.next = next; }
+    }
+
     function drawTracks() {
       $('#tracks').innerHTML = compiled.tracks.map((t, k) => `<button class="${k === trackIdx ? 'on' : ''}" data-k="${k}">${esc(t.name)}</button>`).join('');
       $('#beatWrap').hidden = !compiled.tracks[trackIdx].beat;
@@ -651,9 +717,11 @@
         document.querySelectorAll('.chip.on').forEach((c) => c.classList.remove('on'));
         lastMark = null;
         lyricFrame(-1);
+        guideFrame(-1);
         return;
       }
       lyricFrame(beat);
+      guideFrame(beat);
       const on = new Map();
       const fingers = new Map();
       t.events.forEach((e) => {
@@ -702,12 +770,12 @@
       const wasPlaying = Player.playing;
       Player.stop(true);
       compiled = M.compile(entry, { semis });
-      drawKeyboard(); drawChips(); drawTracks(); drawLyrics();
+      drawKeyboard(); drawChips(); drawTracks(); drawLyrics(); drawGuide();
       frame(-1);
       if (wasPlaying) play();
     }
 
-    drawKeyboard(); drawChips(); drawTracks(); drawLyrics();
+    drawKeyboard(); drawChips(); drawTracks(); drawLyrics(); drawGuide();
 
     playBtn.addEventListener('click', () => { if (Player.playing) { Player.stop(); } else play(); });
     $('#tracks').addEventListener('click', (ev) => {
@@ -715,7 +783,7 @@
       if (!b) return;
       trackIdx = Number(b.dataset.k);
       drawKeyboard();
-      drawTracks(); drawChips(); drawLyrics();
+      drawTracks(); drawChips(); drawLyrics(); drawGuide();
       frame(-1);
       play();
     });
