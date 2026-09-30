@@ -4,6 +4,8 @@
  *   track = { name, desc, bpm, bpb, len, events: [{ b, d, i, n, v }], marks: [{ b, label, sub }] }
  * b/d are in beats. i = instrument: p piano RH · l piano LH · k kick · c clap · e bell · v clave
  *                                   g güiro · s shaker · m click (accent) · n click
+ * dr:1 marks a drum-loop event (the player's Beat switch mutes these).
+ * track.lyrics = [{ b0, b1, label, text, en, chords: [{ b, chord }], words: [{ t, b, join }] | null }]
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -171,6 +173,45 @@
     alberti: { name: 'Alberti bass', steps: 8, bpm: 96, rows: [{ i: 'alb', hits: [0, 1, 2, 3, 4, 5, 6, 7] }, { i: 'rhl', hits: [0] }] },
     jazz: { name: 'Swing', steps: 12, bpm: 116, rows: [{ i: 'walk', hits: [0, 3, 6, 9] }, { i: 'rhs', hits: [0, 5] }, { i: 'click', hits: [3, 9] }] },
   };
+
+  /* ───────────── drum loops under songs ─────────────
+   * A bar of `steps` boxes stretched over the track's beats per bar; v = loudness of the row.
+   * Every event a loop makes is flagged dr:1 so the player's Beat switch can mute it.
+   */
+  const EIGHTHS = [0, 2, 4, 6, 8, 10, 12, 14];
+  const DRUMS = {
+    worship: { name: 'Soft worship beat', steps: 16, rows: [{ i: 'kick', hits: [0, 10], v: 0.75 }, { i: 'clap', hits: [4, 12], v: 0.4 }, { i: 'shaker', hits: EIGHTHS, v: 0.45 }] },
+    praise: { name: 'Praise beat', steps: 16, rows: [{ i: 'kick', hits: [0, 6, 8], v: 0.9 }, { i: 'clap', hits: [4, 12], v: 0.7 }, { i: 'shaker', hits: [0, 2, 3, 4, 6, 8, 10, 11, 12, 14], v: 0.45 }] },
+    highlife: { name: 'Highlife bell and drum', steps: 12, rows: [{ i: 'bell', hits: [0, 2, 4, 5, 7, 9, 11], v: 0.45 }, { i: 'kick', hits: [0, 6], v: 0.8 }, { i: 'clap', hits: [3, 9], v: 0.4 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], v: 0.3 }] },
+    hymn: { name: 'Gentle hymn pulse', steps: 4, rows: [{ i: 'kick', hits: [0], v: 0.6 }, { i: 'shaker', hits: [1, 2, 3], v: 0.35 }] },
+    steady: { name: 'Steady beat', steps: 8, rows: [{ i: 'kick', hits: [0, 4], v: 0.75 }, { i: 'clap', hits: [2, 6], v: 0.5 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7], v: 0.35 }] },
+    waltz: { name: 'Waltz beat (3/4)', steps: 3, rows: [{ i: 'kick', hits: [0], v: 0.8 }, { i: 'clap', hits: [1, 2], v: 0.35 }] },
+    sixeight: { name: '6/8 beat', steps: 6, rows: [{ i: 'kick', hits: [0], v: 0.8 }, { i: 'clap', hits: [3], v: 0.45 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5], v: 0.35 }] },
+  };
+
+  function pickDrums(text, bpb = 4) {
+    const t = String(text || '').toLowerCase();
+    if (bpb === 3 || /3\/4|waltz/.test(t)) return 'waltz';
+    if (/6\/8|12\/8/.test(t)) return 'sixeight';
+    if (/highlife|bell/.test(t)) return 'highlife';
+    if (/praise|dance|jama|upbeat|fast|celebrat/.test(t)) return 'praise';
+    if (/hymn/.test(t)) return 'hymn';
+    return 'worship';
+  }
+
+  function drumLoop(events, from, to, name, bpb, vol = 1) {
+    const p = DRUMS[name];
+    if (!p) throw new Error(`Unknown beat: ${name}`);
+    const stepBeat = bpb / p.steps;
+    for (let bar = from; bar < to - 0.001; bar += bpb) {
+      p.rows.forEach((row) => row.hits.forEach((h) => {
+        const t = bar + h * stepBeat;
+        if (t >= to - 0.001) return;
+        ev(events, t, 0.1, PERC[row.i], [], row.v * vol);
+        events[events.length - 1].dr = 1;
+      }));
+    }
+  }
 
   function pickGroove(text) {
     const t = String(text || '').toLowerCase();
@@ -479,6 +520,12 @@
     }).join('');
     const out = Object.assign({}, spec, { key: newKey || spec.key, chords: tc(spec.chords) });
     if (spec.tracks) out.tracks = spec.tracks.map((t) => Object.assign({}, t, { chords: tc(t.chords), notes: tn(t.notes), key: t.key ? keyName(t.key, semis) : t.key }));
+    if (spec.karaoke) {
+      out.karaoke = {};
+      Object.keys(spec.karaoke).forEach((k) => {
+        out.karaoke[k] = spec.karaoke[k].map((ln) => Object.assign({}, ln, { chords: ln.chords.map((c) => Object.assign({}, c, { chord: transposeChord(c.chord, semis, flats) })) }));
+      });
+    }
     return out;
   }
 
@@ -564,8 +611,25 @@
       }
       default: throw new Error(`Unknown track type ${tr.type}`);
     }
+    if (tr.beat) {
+      drumLoop(t.events, s + (tr.pickup || 0), end, tr.beat, t.bpb, tr.beatVol || 1);
+      t.beat = DRUMS[tr.beat].name;
+    }
+    const words = tr.lyrics && spec.karaoke && spec.karaoke[tr.lyrics === true ? 'chord' : tr.lyrics];
+    if (words) t.lyrics = shiftLyrics(words, s);
     t.len = end;
     return finish(t);
+  }
+
+  /** Lyric lines (beats from the start of the song) moved to where the song starts in this track. */
+  function shiftLyrics(lines, by) {
+    if (!by) return lines;
+    return lines.map((ln) => Object.assign({}, ln, {
+      b0: ln.b0 + by,
+      b1: ln.b1 + by,
+      chords: ln.chords.map((c) => Object.assign({}, c, { b: c.b + by })),
+      words: ln.words && ln.words.map((w) => Object.assign({}, w, { b: w.b + by })),
+    }));
   }
 
   /** Compile an entry into tracks. opts.semis transposes everything. */
@@ -578,7 +642,7 @@
   const midiName = (m) => SHARPS[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
 
   return {
-    LETTERS, QUALITY, GROOVES, pretty, parseChord, chordInfo, numbersFor, noteToMidi, midiName,
-    transposeChord, keyName, pickGroove, instForLabel, compile, FLAT_KEYS,
+    LETTERS, QUALITY, GROOVES, DRUMS, pretty, parseChord, chordInfo, numbersFor, noteToMidi, midiName,
+    transposeChord, keyName, pickGroove, pickDrums, instForLabel, compile, FLAT_KEYS,
   };
 });

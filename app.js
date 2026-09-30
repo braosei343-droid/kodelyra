@@ -209,6 +209,7 @@
     track: null,
     playing: false,
     loop: false,
+    beat: (() => { try { return localStorage.getItem('kodelyra-beat') !== 'off'; } catch (e) { return true; } })(),
     speed: 1,
     onFrame: null,
     onEnd: null,
@@ -258,6 +259,7 @@
         const e = ev[this.idx];
         const b = this.offset + e.b;
         if (b > horizon) break;
+        if (e.dr && !this.beat) { this.idx++; continue; }
         const t = Math.max(ctx.currentTime, this.timeAt(b));
         const dur = e.d * this.spb();
         if (e.i === 'p' || e.i === 'l') e.n.forEach((m) => Engine.piano(this.bus, t, m, dur, e.v));
@@ -376,7 +378,7 @@
       <header class="top"><div class="brand"><span class="logo">K</span> Kodelyra <b>Scan &amp; Play</b></div></header>
       <section class="hero">
         <h1>Hear it. Slow it down. Play along.</h1>
-        <p>Every QR code in <em>Play Ghana Gospel on Piano — Book 1</em> opens a page here. Tap a lesson or song, press <strong>Play</strong>, and watch the keys light up.</p>
+        <p>Every QR code in <em>Play Piano Songs — Book 1</em> opens a page here. Tap a lesson or song, press <strong>Play</strong>, and watch the keys light up.</p>
         <ol class="how"><li><strong>Listen</strong> — hear the example</li><li><strong>Slow</strong> — chord by chord, note by note</li><li><strong>Rhythm</strong> — clap it first</li><li><strong>Play along</strong> — join in, at your speed</li></ol>
         <p class="tip">🔊 Turn the volume up. On iPhone, also flip the silent switch off if you hear nothing.</p>
       </section>
@@ -385,7 +387,7 @@
       <details open><summary>Levels 1–2 · Lessons</summary><div class="list">${lessons.map(linkTo).join('')}</div></details>
       ${groups.map((g) => `<details><summary>${esc(g.name)} <small>${g.items.length}</small></summary><div class="list">${g.items.map(linkTo).join('')}</div></details>`).join('')}
       <details><summary>Levels 3–5 · Chapter sounds</summary><div class="list">${chapters.map(linkTo).join('')}</div></details>
-      <footer class="foot">Kodelyra · Play Ghana Gospel on Piano — Book 1 · Sounds are the book’s own piano arrangements, generated in your browser. Works offline after your first visit.</footer>`;
+      <footer class="foot">Kodelyra · Play Piano Songs — Book 1 · Sounds are the book’s own piano arrangements, generated in your browser. Works offline after your first visit.</footer>`;
     const input = $('#q');
     const results = $('#results');
     input.addEventListener('input', () => {
@@ -427,10 +429,14 @@
         <div class="chips" id="chips"></div>
         <div class="progress"><div id="bar"></div></div>
       </section>
+      <section class="lyrics" id="lyrics" hidden></section>
       <nav class="tracks" id="tracks" aria-label="Choose what to hear"></nav>
       <section class="transport">
         <button class="play" id="play" aria-label="Play">▶ Play</button>
-        <label class="toggle"><input type="checkbox" id="loop"> Loop</label>
+        <div class="toggles">
+          <label class="toggle" id="beatWrap" hidden><input type="checkbox" id="beat"${Player.beat ? ' checked' : ''}> 🥁 Beat</label>
+          <label class="toggle"><input type="checkbox" id="loop"> Loop</label>
+        </div>
       </section>
       <section class="controls">
         <label>Speed <output id="speedOut">100%</output><input id="speed" type="range" min="40" max="130" step="5" value="100"></label>
@@ -438,7 +444,7 @@
       </section>
       ${isSong ? `<section class="info">
         <div class="loopline"><b>${entry.lyrics ? 'The chords' : 'The loop'}</b> ${esc(entry.chords.split(' ').map(M.pretty).join(' → '))}</div>
-        ${entry.lyrics ? `<div class="card"><h3>Words</h3>${entry.lyrics.map(([tw, en]) => `<p><b>${esc(tw)}</b><br><i>${esc(en)}</i></p>`).join('')}</div>` : ''}
+        ${entry.lyrics && !entry.karaoke ? `<div class="card"><h3>Words</h3>${entry.lyrics.map(([tw, en]) => `<p><b>${esc(tw)}</b><br><i>${esc(en)}</i></p>`).join('')}</div>` : ''}
         ${entry.family ? `<div class="card"><h3>Song family</h3><p>${esc(entry.family)}</p></div>` : ''}
         ${entry.rhythm ? `<div class="card"><h3>Rhythm (from the book)</h3><p>${entry.rhythm}</p></div>` : ''}
         ${entry.fact ? `<div class="card"><h3>Did you know?</h3><p>${entry.fact}</p></div>` : ''}
@@ -474,8 +480,88 @@
       $('#chips').innerHTML = seen.slice(0, 10).map((c, k) => `<span class="chip" data-chord="${esc(c)}">${esc(M.pretty(c))}${nums[k] && entry.kind === 'song' ? `<small>${nums[k]}</small>` : ''}</span>`).join('');
     }
 
+    /* Words with each chord printed over the syllable where it changes; lit as the track plays. */
+    let ly = null;
+
+    function lyricLineHTML(ln, li) {
+      const chordTag = (ci) => `<b class="ly-chord" data-c="${li}-${ci}">${esc(M.pretty(ln.chords[ci].chord))}</b>`;
+      let body;
+      if (ln.words && ln.words.length) {
+        const at = ln.words.map(() => []);
+        ln.chords.forEach((c, ci) => {
+          let k = 0;
+          ln.words.forEach((w, wi) => { if (w.b <= c.b + 0.001) k = wi; });
+          at[k].push(ci);
+        });
+        const groups = [];
+        ln.words.forEach((w, wi) => {
+          const syl = `<span class="ly-syl" data-w="${li}-${wi}"><span class="ly-c">${at[wi].map(chordTag).join(' ')}</span><span class="ly-t">${esc(w.t)}</span></span>`;
+          if (wi > 0 && ln.words[wi - 1].join) groups[groups.length - 1] += syl;
+          else groups.push(syl);
+        });
+        body = `<div class="ly-words">${groups.map((g) => `<span class="ly-word">${g}</span>`).join('')}</div>`;
+      } else {
+        body = `<div class="ly-chords">${ln.chords.map((c, ci) => chordTag(ci)).join('')}</div>${ln.text ? `<div class="ly-text">${esc(ln.text)}</div>` : ''}`;
+      }
+      return `<div class="ly-line" data-l="${li}">${ln.label ? `<div class="ly-label">${esc(ln.label)}</div>` : ''}${body}${ln.en ? `<div class="ly-en">${esc(ln.en)}</div>` : ''}</div>`;
+    }
+
+    function drawLyrics() {
+      const t = compiled.tracks[trackIdx];
+      const el = $('#lyrics');
+      if (!t.lyrics) { el.hidden = true; el.innerHTML = ''; ly = null; return; }
+      el.hidden = false;
+      el.innerHTML = `<h3>Words &amp; chords <small>The word and chord light up as they play</small></h3><div class="ly-scroll" id="lyScroll">${t.lyrics.map(lyricLineHTML).join('')}</div>`;
+      const chords = [];
+      t.lyrics.forEach((ln, li) => ln.chords.forEach((c, ci) => chords.push({ b: c.b, key: `${li}-${ci}` })));
+      ly = {
+        lines: t.lyrics,
+        chords,
+        scroll: $('#lyScroll'),
+        lineEls: [...el.querySelectorAll('.ly-line')],
+        wordEls: new Map([...el.querySelectorAll('.ly-syl')].map((s) => [s.dataset.w, s])),
+        chordEls: new Map([...el.querySelectorAll('.ly-chord')].map((s) => [s.dataset.c, s])),
+        line: -2, word: null, chord: null,
+      };
+    }
+
+    function lyricFrame(beat) {
+      if (!ly) return;
+      let li = -1;
+      let wi = -1;
+      let ck = null;
+      if (beat >= 0) {
+        ly.lines.forEach((ln, k) => { if (ln.b0 <= beat + 0.01) li = k; });
+        const ln = ly.lines[li];
+        if (ln && ln.words && beat < ln.b1) ln.words.forEach((w, k) => { if (w.b <= beat + 0.01) wi = k; });
+        ly.chords.forEach((c) => { if (c.b <= beat + 0.01) ck = c.key; });
+      }
+      if (li !== ly.line) {
+        ly.lineEls.forEach((el, k) => { el.classList.toggle('on', k === li); el.classList.toggle('done', k < li); });
+        ly.line = li;
+        const el = ly.lineEls[Math.max(0, li)];
+        if (el) ly.scroll.scrollTo({ top: Math.max(0, el.offsetTop - 8), behavior: li < 0 ? 'auto' : 'smooth' });
+      }
+      const wkey = li >= 0 && wi >= 0 ? `${li}-${wi}` : null;
+      if (wkey !== ly.word) {
+        ly.wordEls.forEach((el, key) => {
+          const [l, w] = key.split('-').map(Number);
+          el.classList.toggle('ly-now', key === wkey);
+          el.classList.toggle('sung', l === li && w < wi);
+        });
+        ly.word = wkey;
+      }
+      if (ck !== ly.chord) {
+        if (ly.chord && ly.chordEls.get(ly.chord)) ly.chordEls.get(ly.chord).classList.remove('ly-now');
+        if (ck && ly.chordEls.get(ck)) ly.chordEls.get(ck).classList.add('ly-now');
+        ly.chord = ck;
+      }
+    }
+
     function drawTracks() {
       $('#tracks').innerHTML = compiled.tracks.map((t, k) => `<button class="${k === trackIdx ? 'on' : ''}" data-k="${k}">${esc(t.name)}</button>`).join('');
+      $('#beatWrap').hidden = !compiled.tracks[trackIdx].beat;
+      $('#beatWrap').title = compiled.tracks[trackIdx].beat || '';
       $('#keyOut').textContent = compiled.spec.key ? M.pretty(compiled.spec.key) : (semis ? `${semis > 0 ? '+' : ''}${semis}` : 'C');
     }
 
@@ -497,8 +583,10 @@
         nowSub.textContent = t.desc;
         document.querySelectorAll('.chip.on').forEach((c) => c.classList.remove('on'));
         lastMark = null;
+        lyricFrame(-1);
         return;
       }
+      lyricFrame(beat);
       const on = new Map();
       const fingers = new Map();
       t.events.forEach((e) => {
@@ -538,12 +626,12 @@
       const wasPlaying = Player.playing;
       Player.stop(true);
       compiled = M.compile(entry, { semis });
-      drawKeyboard(); drawChips(); drawTracks();
+      drawKeyboard(); drawChips(); drawTracks(); drawLyrics();
       frame(-1);
       if (wasPlaying) play();
     }
 
-    drawKeyboard(); drawChips(); drawTracks();
+    drawKeyboard(); drawChips(); drawTracks(); drawLyrics();
 
     playBtn.addEventListener('click', () => { if (Player.playing) { Player.stop(); } else play(); });
     $('#tracks').addEventListener('click', (ev) => {
@@ -551,11 +639,15 @@
       if (!b) return;
       trackIdx = Number(b.dataset.k);
       drawKeyboard();
-      drawTracks(); drawChips();
+      drawTracks(); drawChips(); drawLyrics();
       frame(-1);
       play();
     });
     $('#loop').addEventListener('change', (ev) => { Player.loop = ev.target.checked; });
+    $('#beat').addEventListener('change', (ev) => {
+      Player.beat = ev.target.checked;
+      try { localStorage.setItem('kodelyra-beat', Player.beat ? 'on' : 'off'); } catch (e) { /* private mode */ }
+    });
     $('#speed').addEventListener('input', (ev) => {
       const s = Number(ev.target.value) / 100;
       $('#speedOut').textContent = `${ev.target.value}%`;
