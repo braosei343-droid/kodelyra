@@ -30,6 +30,7 @@
         const wet = c.createGain(); wet.gain.value = 0.16;
         this.verb.connect(wet).connect(this.master);
         this.noise = this.makeNoise();
+        this.loadPiano();
       }
       try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* not supported */ }
       if (!this.unlocked) {
@@ -70,7 +71,65 @@
       return g;
     },
 
+    /* Recorded grand piano: Salamander Grand Piano V3 by Alexander Holm (CC BY 3.0),
+       one sample every minor third from A1 to F#6 — every note is at most one semitone from a recording. */
+    PIANO: [33].concat(...[2, 3, 4, 5, 6].map((o) => [0, 3, 6, 9].map((k) => 12 * (o + 1) + k))).filter((m) => m <= 90),
+    samples: [],
+    pianoDone: false,
+
+    sampleUrl(m) { return `piano/${['C', 'Ds', 'Fs', 'A'][(m % 12) / 3]}${Math.floor(m / 12) - 1}.mp3`; },
+
+    /** Start downloading on page load (no audio context needed); decoding waits for the first tap. */
+    prefetch() {
+      if (this.raw || !window.fetch) return;
+      this.raw = this.PIANO.map((m) => fetch(this.sampleUrl(m)).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null));
+    },
+
+    loadPiano() {
+      if (this.pianoLoad) return this.pianoLoad;
+      this.prefetch();
+      const c = this.ctx;
+      const decode = (ab) => new Promise((ok) => {
+        const p = c.decodeAudioData(ab, ok, () => ok(null));
+        if (p && p.catch) p.catch(() => ok(null));
+      });
+      this.pianoLoad = Promise.all((this.raw || []).map((p, i) => p
+        .then((ab) => (ab ? decode(ab) : null))
+        .then((buf) => { if (buf) this.samples.push({ m: this.PIANO[i], buf, off: onsetOf(buf) }); })
+        .catch(() => {})))
+        .then(() => { this.pianoDone = this.samples.length > 0; });
+      return this.pianoLoad;
+    },
+
+    whenPiano(ms) {
+      if (this.pianoDone) return Promise.resolve();
+      return Promise.race([this.loadPiano(), new Promise((r) => setTimeout(r, ms))]);
+    },
+
     piano(bus, t, midi, dur, vel) {
+      if (!this.pianoDone) { this.synthPiano(bus, t, midi, dur, vel); return; }
+      const c = this.ctx;
+      let s = this.samples[0];
+      for (const x of this.samples) if (Math.abs(x.m - midi) < Math.abs(s.m - midi)) s = x;
+      const src = c.createBufferSource();
+      src.buffer = s.buf;
+      src.playbackRate.value = Math.pow(2, (midi - s.m) / 12);
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.Q.value = 0;
+      lp.frequency.value = 1800 + vel * vel * 18000;
+      const g = c.createGain();
+      const level = 1.6 * vel;
+      g.gain.setValueAtTime(level, t);
+      g.gain.setValueAtTime(level, t + dur);
+      g.gain.setTargetAtTime(0.0001, t + dur, midi < 48 ? 0.16 : 0.1);
+      src.connect(lp).connect(g).connect(bus);
+      src.start(t, s.off);
+      src.stop(t + dur + 1);
+    },
+
+    /** Fallback tone while the recorded piano downloads (or if it can't load). */
+    synthPiano(bus, t, midi, dur, vel) {
       const c = this.ctx;
       const f = 440 * Math.pow(2, (midi - 69) / 12);
       const out = c.createGain();
@@ -100,7 +159,7 @@
       lp.connect(out).connect(bus);
     },
 
-    /** Keyboard "strings" tone: slow swell, detuned saws, soft top — the Ghanaian worship pad. */
+    /** Keyboard "strings" tone: slow swell, detuned saws, soft top — a warm keyboard pad. */
     strings(bus, t, midi, dur, vel) {
       const c = this.ctx;
       const f = 440 * Math.pow(2, (midi - 69) / 12);
@@ -187,6 +246,14 @@
       }
     },
   };
+
+  /** Seconds of silence before the hammer strikes, so every note lands exactly on the beat. */
+  function onsetOf(buf) {
+    const d = buf.getChannelData(0);
+    const n = Math.min(d.length, Math.floor(buf.sampleRate * 0.3));
+    for (let i = 0; i < n; i++) if (Math.abs(d[i]) > 0.008) return Math.max(0, i / buf.sampleRate - 0.002);
+    return 0;
+  }
 
   function silentWav() {
     const n = 800;
@@ -369,7 +436,7 @@
     const songs = DATA.entries.filter((e) => e.kind === 'song');
     const groups = [];
     songs.forEach((s) => {
-      const g = s.n <= 10 ? 'Ghana Gospel Songs' : (s.group || 'Songs');
+      const g = s.n <= 10 ? 'Songs from Ghana' : (s.group || 'Songs');
       let grp = groups.find((x) => x.name === g);
       if (!grp) { grp = { name: g, items: [] }; groups.push(grp); }
       grp.items.push(s);
@@ -387,7 +454,7 @@
       <details open><summary>Levels 1–2 · Lessons</summary><div class="list">${lessons.map(linkTo).join('')}</div></details>
       ${groups.map((g) => `<details><summary>${esc(g.name)} <small>${g.items.length}</small></summary><div class="list">${g.items.map(linkTo).join('')}</div></details>`).join('')}
       <details><summary>Levels 3–5 · Chapter sounds</summary><div class="list">${chapters.map(linkTo).join('')}</div></details>
-      <footer class="foot">Kodelyra · Play Piano Songs — Book 1 · Sounds are the book’s own piano arrangements, generated in your browser. Works offline after your first visit.</footer>`;
+      <footer class="foot">Kodelyra · Play Piano Songs — Book 1 · Arrangements are the book’s own. Piano sound: Salamander Grand Piano by Alexander Holm (CC BY 3.0). Works offline after your first visit.</footer>`;
     const input = $('#q');
     const results = $('#results');
     input.addEventListener('input', () => {
@@ -414,7 +481,7 @@
     const next = DATA.entries[i + 1];
     document.title = `${entry.ref} · ${entry.title} — Kodelyra Scan & Play`;
     const isSong = entry.kind === 'song';
-    const yt = isSong ? `https://www.youtube.com/results?search_query=${encodeURIComponent(`${entry.title} ${entry.country === 'Ghana' ? 'Ghana gospel chorus' : /traditional/i.test(entry.artist || '') ? 'traditional song' : entry.artist || ''}`)}` : null;
+    const yt = isSong ? `https://www.youtube.com/results?search_query=${encodeURIComponent(`${entry.title} ${entry.country === 'Ghana' ? 'Twi song Ghana' : /traditional/i.test(entry.artist || '') ? 'traditional song' : entry.artist || ''}`)}` : null;
 
     app.innerHTML = `
       <header class="top"><a class="back" href="./" data-go="">← All songs &amp; lessons</a><span class="brand small"><span class="logo">K</span> Scan &amp; Play</span></header>
@@ -449,7 +516,7 @@
         ${entry.rhythm ? `<div class="card"><h3>Rhythm (from the book)</h3><p>${entry.rhythm}</p></div>` : ''}
         ${entry.fact ? `<div class="card"><h3>Did you know?</h3><p>${entry.fact}</p></div>` : ''}
         <a class="btn outline" href="${yt}" target="_blank" rel="noopener">▶ ${entry.lyrics ? 'Hear it sung (YouTube search)' : 'Hear the original recording (YouTube)'}</a>
-        <p class="small-note">${entry.lyrics ? 'The player plays the book’s version in C. Use Key − / + to move it to your church’s key.' : 'The player uses the book’s simplified piano version so you can hear exactly what to play. The original recording opens on YouTube.'}</p>
+        <p class="small-note">${entry.lyrics ? 'The player plays the book’s version in C. Use Key − / + to move it to your singer’s key.' : 'The player uses the book’s simplified piano version so you can hear exactly what to play. The original recording opens on YouTube.'}</p>
       </section>` : ''}
       ${entry.listen ? `<section class="info"><div class="card"><h3>Hear the songs</h3>${entry.listen.map((s) => `<p><a class="btn outline" href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${s.title} ${s.artist}`)}" target="_blank" rel="noopener">▶ ${esc(s.title)} — ${esc(s.artist)}</a></p>`).join('')}<p class="small-note">Recordings open on YouTube. The player plays the book’s practice loop in C — use Key − / + until it matches the recording.</p></div></section>` : ''}
       <nav class="pager">${prev ? `<a href="?${prev.code}" data-go="${prev.code}">← ${esc(prev.ref)}</a>` : '<span></span>'}${next ? `<a href="?${next.code}" data-go="${next.code}">${esc(next.ref)} →</a>` : '<span></span>'}</nav>
@@ -610,6 +677,15 @@
     }
 
     function play() {
+      Engine.ensure();
+      if (Engine.pianoDone) { startTrack(); return; }
+      if (playBtn.disabled) return;
+      playBtn.textContent = 'Loading piano…';
+      playBtn.disabled = true;
+      Engine.whenPiano(3000).then(() => { playBtn.disabled = false; startTrack(); });
+    }
+
+    function startTrack() {
       const t = compiled.tracks[trackIdx];
       Player.loop = $('#loop').checked;
       Player.onFrame = frame;
@@ -673,6 +749,7 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) Player.stop(); });
 
   render();
+  Engine.prefetch();
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

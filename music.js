@@ -31,8 +31,9 @@
     dim: [[0, 0], [3, 2], [6, 4]],
     6: [[0, 0], [4, 2], [7, 4], [9, 5]],
     m7b5: [[0, 0], [3, 2], [6, 4], [10, 6]],
+    dim7: [[0, 0], [3, 2], [6, 4], [9, 5]],
   };
-  const CHORD_RE = /^([A-G](?:#|b)?)(maj7|m7b5|m7|m|7|sus2|sus4|add9|dim|6)?$/;
+  const CHORD_RE = /^([A-G](?:#|b)?)(maj7|m7b5|m7|m|7|sus2|sus4|add9|dim7|dim|6)?$/;
   const DEG = ['1', '♭2', '2', '♭3', '3', '4', '♭5', '5', '♭6', '6', '♭7', '7'];
 
   /* ───────────── pitch helpers ───────────── */
@@ -143,7 +144,7 @@
    */
   const GROOVES = {
     ballad: { name: 'Ballad', bpm: 72, rows: [{ i: 'rhl', hits: [0] }, { i: 'bass', hits: [0, 8] }] },
-    strings: { name: 'Worship strings', bpm: 66, rows: [{ i: 'pad', hits: [0] }] },
+    strings: { name: 'Soft strings', bpm: 66, rows: [{ i: 'pad', hits: [0] }] },
     pop: { name: 'Pop (pushed)', bpm: 100, rows: [{ i: 'rh', hits: [0, 3, 6, 10, 12] }, { i: 'bass', hits: [0, 8] }, { i: 'kick', hits: [0, 8] }, { i: 'clap', hits: [4, 12] }] },
     drive: { name: 'Driving 8ths', bpm: 116, rows: [{ i: 'rhs', hits: [0, 2, 4, 6, 8, 10, 12, 14] }, { i: 'bass', hits: [0, 4, 8, 12] }, { i: 'kick', hits: [0, 8] }, { i: 'clap', hits: [4, 12] }] },
     folk: { name: 'Steady beat', bpm: 96, rows: [{ i: 'rh', hits: [0, 8] }, { i: 'bass', hits: [0, 4, 8, 12] }] },
@@ -151,7 +152,7 @@
     march: { name: 'March', bpm: 104, rows: [{ i: 'bass', hits: [0, 8] }, { i: 'b5', hits: [4, 12] }, { i: 'rh', hits: [0, 8] }] },
     lullaby: { name: 'Gentle rocking', bpm: 66, rows: [{ i: 'bass', hits: [0] }, { i: 'rhl', hits: [8] }] },
     soul: { name: 'Soul groove', bpm: 116, rows: [{ i: 'bass', hits: [0] }, { i: 'b5', hits: [8] }, { i: 'rhs', hits: [4, 12] }, { i: 'clap', hits: [4, 12] }] },
-    gospel: { name: 'Gospel', bpm: 76, rows: [{ i: 'bass', hits: [0, 8] }, { i: 'rh', hits: [0, 4, 8, 12] }, { i: 'clap', hits: [4, 12] }] },
+    gospel: { name: 'Soul clap', bpm: 76, rows: [{ i: 'bass', hits: [0, 8] }, { i: 'rh', hits: [0, 4, 8, 12] }, { i: 'clap', hits: [4, 12] }] },
     reggae: { name: 'Reggae one drop', bpm: 76, rows: [{ i: 'rhs', hits: [4, 12] }, { i: 'kick', hits: [8] }, { i: 'bass', hits: [0, 6, 10] }] },
     ska: { name: 'Ska / rocksteady off-beat', bpm: 112, rows: [{ i: 'rhs', hits: [2, 6, 10, 14] }, { i: 'bass', hits: [0, 8] }, { i: 'kick', hits: [0, 8] }] },
     afrobeats: { name: 'Afrobeats 3-3-2', bpm: 104, rows: [{ i: 'bass', hits: [0, 3, 6, 8, 11, 14] }, { i: 'clap', hits: [4, 12] }, { i: 'rhs', hits: [2, 7, 10, 15] }, { i: 'shaker', hits: [0, 2, 4, 6, 8, 10, 12, 14] }] },
@@ -180,10 +181,10 @@
    */
   const EIGHTHS = [0, 2, 4, 6, 8, 10, 12, 14];
   const DRUMS = {
-    worship: { name: 'Soft worship beat', steps: 16, rows: [{ i: 'kick', hits: [0, 10], v: 0.75 }, { i: 'clap', hits: [4, 12], v: 0.4 }, { i: 'shaker', hits: EIGHTHS, v: 0.45 }] },
-    praise: { name: 'Praise beat', steps: 16, rows: [{ i: 'kick', hits: [0, 6, 8], v: 0.9 }, { i: 'clap', hits: [4, 12], v: 0.7 }, { i: 'shaker', hits: [0, 2, 3, 4, 6, 8, 10, 11, 12, 14], v: 0.45 }] },
+    worship: { name: 'Soft ballad beat', steps: 16, rows: [{ i: 'kick', hits: [0, 10], v: 0.75 }, { i: 'clap', hits: [4, 12], v: 0.4 }, { i: 'shaker', hits: EIGHTHS, v: 0.45 }] },
+    praise: { name: 'Upbeat dance beat', steps: 16, rows: [{ i: 'kick', hits: [0, 6, 8], v: 0.9 }, { i: 'clap', hits: [4, 12], v: 0.7 }, { i: 'shaker', hits: [0, 2, 3, 4, 6, 8, 10, 11, 12, 14], v: 0.45 }] },
     highlife: { name: 'Highlife bell and drum', steps: 12, rows: [{ i: 'bell', hits: [0, 2, 4, 5, 7, 9, 11], v: 0.45 }, { i: 'kick', hits: [0, 6], v: 0.8 }, { i: 'clap', hits: [3, 9], v: 0.4 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], v: 0.3 }] },
-    hymn: { name: 'Gentle hymn pulse', steps: 4, rows: [{ i: 'kick', hits: [0], v: 0.6 }, { i: 'shaker', hits: [1, 2, 3], v: 0.35 }] },
+    hymn: { name: 'Gentle pulse', steps: 4, rows: [{ i: 'kick', hits: [0], v: 0.6 }, { i: 'shaker', hits: [1, 2, 3], v: 0.35 }] },
     steady: { name: 'Steady beat', steps: 8, rows: [{ i: 'kick', hits: [0, 4], v: 0.75 }, { i: 'clap', hits: [2, 6], v: 0.5 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7], v: 0.35 }] },
     waltz: { name: 'Waltz beat (3/4)', steps: 3, rows: [{ i: 'kick', hits: [0], v: 0.8 }, { i: 'clap', hits: [1, 2], v: 0.35 }] },
     sixeight: { name: '6/8 beat', steps: 6, rows: [{ i: 'kick', hits: [0], v: 0.8 }, { i: 'clap', hits: [3], v: 0.45 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5], v: 0.35 }] },
@@ -378,12 +379,13 @@
     chords.forEach((sym, i) => {
       const info = chordInfo(sym);
       const rh = opts.rootPosition ? info.rh : voiceLead(prev, info);
+      const len = opts.each ? opts.each[i % opts.each.length] : beats;
       prev = rh;
       marks.push({ b: t, label: pretty(sym), sub: opts.nums ? opts.nums[i] : info.names.map(pretty).join(' · '), chord: sym, rh, lh: opts.noBass ? [] : [info.lh] });
-      if (!opts.noRH) ev(events, t, beats * 0.96, 'p', rh, opts.vol || 0.62);
-      if (!opts.noBass) ev(events, t, beats * 0.96, 'l', [info.lh], (opts.vol || 0.62) * 0.9);
-      if (opts.clicks) clicks(events, t, beats, 4, 0.3);
-      t += beats;
+      if (!opts.noRH) ev(events, t, len * 0.96, 'p', rh, opts.vol || 0.62);
+      if (!opts.noBass) ev(events, t, len * 0.96, 'l', [info.lh], (opts.vol || 0.62) * 0.9);
+      if (opts.clicks) clicks(events, t, len, 4, 0.3);
+      t += len;
     });
     return t;
   }
@@ -591,7 +593,7 @@
     const nums = tr.numbers === false ? null : (chords.length ? numbersFor(key, list) : null);
     let end = s;
     switch (tr.type) {
-      case 'block': end = blockChords(t.events, t.marks, list, { start: s, beats: tr.beats || bpb, nums, clicks: tr.clicks, noBass: tr.noBass, noRH: tr.noRH, rootPosition: tr.rootPosition }); break;
+      case 'block': end = blockChords(t.events, t.marks, list, { start: s, beats: tr.beats || bpb, each: tr.each, nums, clicks: tr.clicks, noBass: tr.noBass, noRH: tr.noRH, rootPosition: tr.rootPosition }); break;
       case 'arp': end = arpThenBlock(t.events, t.marks, list, { start: s, nums }); break;
       case 'groove': {
         const g = grooveFromSpec(tr);
