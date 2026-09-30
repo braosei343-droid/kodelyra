@@ -138,6 +138,7 @@
    */
   const GROOVES = {
     ballad: { name: 'Ballad', bpm: 72, rows: [{ i: 'rhl', hits: [0] }, { i: 'bass', hits: [0, 8] }] },
+    strings: { name: 'Worship strings', bpm: 66, rows: [{ i: 'pad', hits: [0] }] },
     pop: { name: 'Pop (pushed)', bpm: 100, rows: [{ i: 'rh', hits: [0, 3, 6, 10, 12] }, { i: 'bass', hits: [0, 8] }, { i: 'kick', hits: [0, 8] }, { i: 'clap', hits: [4, 12] }] },
     drive: { name: 'Driving 8ths', bpm: 116, rows: [{ i: 'rhs', hits: [0, 2, 4, 6, 8, 10, 12, 14] }, { i: 'bass', hits: [0, 4, 8, 12] }, { i: 'kick', hits: [0, 8] }, { i: 'clap', hits: [4, 12] }] },
     folk: { name: 'Steady beat', bpm: 96, rows: [{ i: 'rh', hits: [0, 8] }, { i: 'bass', hits: [0, 4, 8, 12] }] },
@@ -171,6 +172,7 @@
   function pickGroove(text) {
     const t = String(text || '').toLowerCase();
     const rules = [
+      ['strings', /strings|worship pad/],
       ['shuffle', /shuffle|boogie|12-bar|blues|rock ’n’ roll|rock 'n' roll|rock and roll/],
       ['waltz', /waltz|3\/4|in three|oom-pah-pah|minuet/],
       ['sixeight', /6\/8|lilt/],
@@ -207,6 +209,7 @@
   /** Map a rhythm-grid row label from the book to an instrument. */
   function instForLabel(label, color) {
     const l = String(label).toLowerCase();
+    if (/string|pad/.test(l)) return 'pad';
     if (/kick|drop/.test(l)) return 'kick';
     if (/clap/.test(l)) return 'clap';
     if (/bell/.test(l)) return 'bell';
@@ -281,7 +284,7 @@
             return;
           }
           if (opts.noPiano) return;
-          const isLH = ['bass', 'b5', 'boog', 'walk', 'alb'].includes(row.i);
+          const isLH = ['bass', 'b5', 'boog', 'walk', 'alb', 'pad'].includes(row.i);
           if (opts.rhAsClap) {
             ev(events, t, 0.1, isLH ? 'k' : 'c', [], percVol);
             return;
@@ -290,6 +293,7 @@
             case 'rh': ev(events, t, Math.min(span, 2) * 0.9, 'p', rh, vol * 0.8); break;
             case 'rhs': ev(events, t, Math.min(span, 0.5) * 0.6, 'p', rh, vol * 0.8); break;
             case 'rhl': ev(events, t, span * 0.98, 'p', rh, vol * 0.75); break;
+            case 'pad': ev(events, t, span * 0.99, 'w', [info.lh, ...rh], vol * 0.8); break;
             case 'arp': { const seq = [0, 1, 2, 1]; ev(events, t, span * 0.95, 'p', [rh[seq[hi % 4] % rh.length]], vol * 0.7); break; }
             case 'up': { const seq = [rh[0], rh[1], rh[2], rh[0] + 12]; ev(events, t, span * 0.95, 'p', [seq[hi % 4]], vol * 0.7); break; }
             case 'alb': { const lo = 48 + info.bassPc; const seq = [lo, lo + 7, lo + (info.rh[1] - info.rh[0]), lo + 7]; ev(events, t, span * 0.95, 'l', [seq[hi % 4]], vol * 0.6); break; }
@@ -347,19 +351,25 @@
     return t;
   }
 
-  /** Token sequence: "[Label] C4 D4:2 C4+E4+G4:4 - -:2". Default duration = 1 beat. */
+  /**
+   * Token sequence: "[Label] C4 D4:2 C4+E4+G4:4 - -:2". Default duration = 1 beat.
+   * "^F" (no time) starts a sustained background chord that lasts until the next "^" or the end.
+   * opts: { start, sub, vol, melody (every note is right hand), pad: 'w' strings | 'p' soft piano | false (silent) }
+   */
   function sequence(events, marks, text, opts = {}) {
     let t = opts.start || 0;
     const re = /\[([^\]]*)\]|\{([^}]*)\}|(\S+)/g;
     let m;
     let label = null;
     let sub = opts.sub || '';
+    const pads = [];
     const noteLabel = (list) => list.map((n) => pretty(n.replace(/-?\d$/, ''))).join(' + ');
     while ((m = re.exec(text))) {
       if (m[1] != null) { label = m[1]; continue; }
       if (m[2] != null) { sub = m[2]; continue; }
       const tok = m[3];
       if (tok === '|') continue;
+      if (tok[0] === '^') { pads.push({ b: t, sym: tok.slice(1) }); continue; }
       const [body, durStr] = tok.split(':');
       const d = durStr ? Number(durStr) : 1;
       if (body === '-') {
@@ -379,8 +389,8 @@
       } else {
         const names = body.split('+');
         const midis = names.map(noteToMidi);
-        rh = midis.filter((x) => x >= 60);
-        lh = midis.filter((x) => x < 60);
+        rh = opts.melody ? midis : midis.filter((x) => x >= 60);
+        lh = opts.melody ? [] : midis.filter((x) => x < 60);
         own = noteLabel(names);
         marks.push({ b: t, label: label || own, sub: label && label !== '?' ? `${own}${sub ? ` — ${sub}` : ''}` : sub, rh: label === '?' ? [] : rh, lh: label === '?' ? [] : lh });
       }
@@ -388,6 +398,18 @@
       if (rh.length) ev(events, t, d * 0.95, 'p', rh, opts.vol || 0.65);
       if (lh.length) ev(events, t, d * 0.95, 'l', lh, (opts.vol || 0.65) * 0.9);
       t += d;
+    }
+    if (opts.pad !== false) {
+      let prev = null;
+      pads.forEach((p, i) => {
+        const end = i + 1 < pads.length ? pads[i + 1].b : t;
+        if (end <= p.b) return;
+        const info = chordInfo(p.sym);
+        const rh = voiceLead(prev, info).map((x) => (x - 12 >= 52 ? x - 12 : x));
+        prev = rh;
+        const inst = opts.pad || 'w';
+        ev(events, p.b, (end - p.b) * 0.99, inst, [info.lh - 12 >= 36 ? info.lh - 12 : info.lh, ...rh], inst === 'w' ? 0.5 : 0.24);
+      });
     }
     return t;
   }
@@ -427,7 +449,11 @@
     const newKey = spec.key ? keyName(spec.key, semis) : null;
     const flats = newKey ? FLAT_KEYS.includes(newKey) : false;
     const tc = (s) => s && s.split(/\s+/).map((c) => transposeChord(c, semis, flats)).join(' ');
-    const tn = (s) => s && s.replace(/\b([A-G](?:#|b)?)(-?\d)\b/g, (x) => transposeNote(x, semis));
+    const tn = (s) => s && s.split(/(\s+)/).map((tok) => {
+      const c = /^([@^])([A-G][^:\s]*)(.*)$/.exec(tok);
+      if (c) return c[1] + transposeChord(c[2], semis, flats) + c[3];
+      return tok.replace(/\b([A-G](?:#|b)?)(-?\d)\b/g, (x) => transposeNote(x, semis));
+    }).join('');
     const out = Object.assign({}, spec, { key: newKey || spec.key, chords: tc(spec.chords) });
     if (spec.tracks) out.tracks = spec.tracks.map((t) => Object.assign({}, t, { chords: tc(t.chords), notes: tn(t.notes), key: t.key ? keyName(t.key, semis) : t.key }));
     return out;
@@ -508,7 +534,7 @@
       }
       case 'seq': {
         const n = tr.notes;
-        for (let r = 0; r < reps; r++) end = sequence(t.events, t.marks, n, { start: end, sub: tr.sub });
+        for (let r = 0; r < reps; r++) end = sequence(t.events, t.marks, n, { start: end, sub: tr.sub, melody: tr.melody, pad: tr.pad, vol: tr.vol });
         if (tr.under) softChords(t.events, tr.under.split(/\s+/), bpb, s, 0.22);
         if (tr.clicks) clicks(t.events, s, end - s, bpb, 0.25);
         break;
@@ -522,7 +548,7 @@
   /** Compile an entry into tracks. opts.semis transposes everything. */
   function compile(spec, opts = {}) {
     const s = transposeSpec(spec, opts.semis || 0);
-    const tracks = s.kind === 'song' ? songTracks(s) : s.tracks.map((tr) => customTrack(tr, s));
+    const tracks = s.tracks ? s.tracks.map((tr) => customTrack(tr, s)) : songTracks(s);
     return { spec: s, tracks };
   }
 

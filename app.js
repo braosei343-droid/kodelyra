@@ -100,6 +100,42 @@
       lp.connect(out).connect(bus);
     },
 
+    /** Keyboard "strings" tone: slow swell, detuned saws, soft top — the Ghanaian worship pad. */
+    strings(bus, t, midi, dur, vel) {
+      const c = this.ctx;
+      const f = 440 * Math.pow(2, (midi - 69) / 12);
+      const out = c.createGain();
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.Q.value = 0.7;
+      lp.frequency.value = Math.min(4200, 900 + f * 2.5);
+      const peak = 0.07 * vel * (midi < 48 ? 1.2 : 1);
+      const attack = Math.min(0.35, dur * 0.3);
+      out.gain.setValueAtTime(0.0001, t);
+      out.gain.linearRampToValueAtTime(peak, t + attack);
+      out.gain.setValueAtTime(peak, t + Math.max(attack, dur - 0.05));
+      out.gain.setTargetAtTime(0.0001, t + dur, 0.25);
+      const stop = t + dur + 1.4;
+      const lfo = c.createOscillator();
+      const depth = c.createGain();
+      lfo.frequency.value = 5.2;
+      depth.gain.value = f * 0.004;
+      lfo.connect(depth);
+      lfo.start(t);
+      lfo.stop(stop);
+      [-7, 0, 7].forEach((cents) => {
+        const o = c.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.detune.value = cents;
+        depth.connect(o.frequency);
+        o.connect(lp);
+        o.start(t);
+        o.stop(stop);
+      });
+      lp.connect(out).connect(bus);
+    },
+
     perc(bus, t, kind, vel) {
       const c = this.ctx;
       const g = c.createGain();
@@ -225,6 +261,7 @@
         const t = Math.max(ctx.currentTime, this.timeAt(b));
         const dur = e.d * this.spb();
         if (e.i === 'p' || e.i === 'l') e.n.forEach((m) => Engine.piano(this.bus, t, m, dur, e.v));
+        else if (e.i === 'w') e.n.forEach((m) => Engine.strings(this.bus, t, m, dur, e.v));
         else Engine.perc(this.bus, t, e.i, e.v);
         this.idx++;
       }
@@ -373,7 +410,7 @@
     const next = DATA.entries[i + 1];
     document.title = `${entry.ref} · ${entry.title} — Kodelyra Scan & Play`;
     const isSong = entry.kind === 'song';
-    const yt = isSong ? `https://www.youtube.com/results?search_query=${encodeURIComponent(`${entry.title} ${/traditional/i.test(entry.artist || '') ? 'traditional song' : entry.artist || ''}`)}` : null;
+    const yt = isSong ? `https://www.youtube.com/results?search_query=${encodeURIComponent(`${entry.title} ${entry.country === 'Ghana' ? 'Ghana gospel chorus' : /traditional/i.test(entry.artist || '') ? 'traditional song' : entry.artist || ''}`)}` : null;
 
     app.innerHTML = `
       <header class="top"><a class="back" href="./" data-go="">← All songs &amp; lessons</a><span class="brand small"><span class="logo">K</span> Scan &amp; Play</span></header>
@@ -398,12 +435,13 @@
         <div class="transpose"><span>Key</span><button id="down" aria-label="Transpose down">−</button><output id="keyOut"></output><button id="up" aria-label="Transpose up">+</button></div>
       </section>
       ${isSong ? `<section class="info">
-        <div class="loopline"><b>The loop</b> ${esc(entry.chords.split(' ').map(M.pretty).join(' → '))}</div>
+        <div class="loopline"><b>${entry.lyrics ? 'The chords' : 'The loop'}</b> ${esc(entry.chords.split(' ').map(M.pretty).join(' → '))}</div>
+        ${entry.lyrics ? `<div class="card"><h3>Words</h3>${entry.lyrics.map(([tw, en]) => `<p><b>${esc(tw)}</b><br><i>${esc(en)}</i></p>`).join('')}</div>` : ''}
         ${entry.family ? `<div class="card"><h3>Song family</h3><p>${esc(entry.family)}</p></div>` : ''}
         ${entry.rhythm ? `<div class="card"><h3>Rhythm (from the book)</h3><p>${entry.rhythm}</p></div>` : ''}
         ${entry.fact ? `<div class="card"><h3>Did you know?</h3><p>${entry.fact}</p></div>` : ''}
-        <a class="btn outline" href="${yt}" target="_blank" rel="noopener">▶ Hear the original recording (YouTube)</a>
-        <p class="small-note">The player uses the book’s simplified piano version so you can hear exactly what to play. The original recording opens on YouTube.</p>
+        <a class="btn outline" href="${yt}" target="_blank" rel="noopener">▶ ${entry.lyrics ? 'Hear it sung (YouTube search)' : 'Hear the original recording (YouTube)'}</a>
+        <p class="small-note">${entry.lyrics ? 'The player plays the book’s version in C. Use Key − / + to move it to your church’s key.' : 'The player uses the book’s simplified piano version so you can hear exactly what to play. The original recording opens on YouTube.'}</p>
       </section>` : ''}
       <nav class="pager">${prev ? `<a href="?${prev.code}" data-go="${prev.code}">← ${esc(prev.ref)}</a>` : '<span></span>'}${next ? `<a href="?${next.code}" data-go="${next.code}">${esc(next.ref)} →</a>` : '<span></span>'}</nav>
       <p class="tip center">🔊 No sound? Turn the volume up — on iPhone, flip the silent switch off.</p>`;
