@@ -1,5 +1,5 @@
 /* Offline support: keep the player and every song page available after the first visit. */
-const CACHE = 'kodelyra-play-v7';
+const CACHE = 'kodelyra-play-v8';
 const SHELL = ['./', 'index.html', 'style.css', 'music.js', 'data.js', 'app.js', 'icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {

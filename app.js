@@ -439,7 +439,7 @@
     const songs = DATA.entries.filter((e) => e.kind === 'song');
     const groups = [];
     songs.forEach((s) => {
-      const g = s.n <= 10 ? 'Songs from Ghana' : (s.group || 'Songs');
+      const g = s.group || 'Songs';
       let grp = groups.find((x) => x.name === g);
       if (!grp) { grp = { name: g, items: [] }; groups.push(grp); }
       grp.items.push(s);

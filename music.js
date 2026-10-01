@@ -187,6 +187,11 @@
     ghanapraise: { name: 'Ghana praise beat', steps: 16, rows: [{ i: 'kick', hits: [0, 4, 8, 12], v: 0.8 }, { i: 'rim', hits: [4, 12], v: 0.55 }, { i: 'congahi', hits: [3, 10], v: 0.5 }, { i: 'congalo', hits: [6, 7, 14], v: 0.55 }, { i: 'shaker', hits: [0, 2, 3, 4, 6, 8, 10, 11, 12, 14], v: 0.3 }] },
     highlife: { name: 'Highlife bell and drum', steps: 12, rows: [{ i: 'bell', hits: [0, 2, 4, 5, 7, 9, 11], v: 0.45 }, { i: 'kick', hits: [0, 6], v: 0.8 }, { i: 'clap', hits: [3, 9], v: 0.4 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], v: 0.3 }] },
     hymn: { name: 'Gentle pulse', steps: 4, rows: [{ i: 'kick', hits: [0], v: 0.6 }, { i: 'shaker', hits: [1, 2, 3], v: 0.35 }] },
+    hymntwo: { name: 'Gentle 2/4 pulse', steps: 2, rows: [{ i: 'kick', hits: [0], v: 0.6 }, { i: 'shaker', hits: [1], v: 0.35 }] },
+    hymnthree: { name: 'Gentle 3/4 pulse', steps: 3, rows: [{ i: 'kick', hits: [0], v: 0.55 }, { i: 'shaker', hits: [1, 2], v: 0.3 }] },
+    hymnnine: { name: 'Gentle 9/8 pulse', steps: 9, rows: [{ i: 'kick', hits: [0], v: 0.6 }, { i: 'rim', hits: [3, 6], v: 0.35 }, { i: 'shaker', hits: [1, 2, 4, 5, 7, 8], v: 0.25 }] },
+    hymnnine: { name: 'Gentle 9/8 pulse', steps: 9, rows: [{ i: 'kick', hits: [0], v: 0.55 }, { i: 'rim', hits: [3, 6], v: 0.3 }, { i: 'shaker', hits: [1, 2, 4, 5, 7, 8], v: 0.2 }] },
+    semachi: { name: 'Semachi (Korean 9/8)', steps: 9, rows: [{ i: 'kick', hits: [0, 3], v: 0.75 }, { i: 'rim', hits: [0, 3, 5, 7], v: 0.5 }, { i: 'congalo', hits: [6], v: 0.6 }] },
     steady: { name: 'Steady beat', steps: 8, rows: [{ i: 'kick', hits: [0, 4], v: 0.75 }, { i: 'clap', hits: [2, 6], v: 0.5 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5, 6, 7], v: 0.35 }] },
     waltz: { name: 'Waltz beat (3/4)', steps: 3, rows: [{ i: 'kick', hits: [0], v: 0.8 }, { i: 'clap', hits: [1, 2], v: 0.35 }] },
     sixeight: { name: '6/8 beat', steps: 6, rows: [{ i: 'kick', hits: [0], v: 0.8 }, { i: 'clap', hits: [3], v: 0.45 }, { i: 'shaker', hits: [0, 1, 2, 3, 4, 5], v: 0.35 }] },
@@ -202,14 +207,16 @@
     return 'worship';
   }
 
-  function drumLoop(events, from, to, name, bpb, vol = 1) {
+  /** bars: optional list of bar lengths in beats (cycled), for songs with a short bar; hits past a short bar's end are dropped. */
+  function drumLoop(events, from, to, name, bpb, vol = 1, bars) {
     const p = DRUMS[name];
     if (!p) throw new Error(`Unknown beat: ${name}`);
     const stepBeat = bpb / p.steps;
-    for (let bar = from; bar < to - 0.001; bar += bpb) {
+    for (let bar = from, k = 0; bar < to - 0.001; bar += bars ? bars[k++ % bars.length] : bpb) {
+      const len = bars ? bars[k % bars.length] : bpb;
       p.rows.forEach((row) => row.hits.forEach((h) => {
         const t = bar + h * stepBeat;
-        if (t >= to - 0.001) return;
+        if (t >= to - 0.001 || t >= bar + len - 0.001) return;
         ev(events, t, 0.1, PERC[row.i], [], row.v * vol);
         events[events.length - 1].dr = 1;
       }));
@@ -616,7 +623,7 @@
       default: throw new Error(`Unknown track type ${tr.type}`);
     }
     if (tr.beat) {
-      drumLoop(t.events, s + (tr.pickup || 0), end, tr.beat, t.bpb, tr.beatVol || 1);
+      drumLoop(t.events, s + (tr.pickup || 0), end, tr.beat, t.bpb, tr.beatVol || 1, tr.bars);
       t.beat = DRUMS[tr.beat].name;
     }
     const words = tr.lyrics && spec.karaoke && spec.karaoke[tr.lyrics === true ? 'chord' : tr.lyrics];
